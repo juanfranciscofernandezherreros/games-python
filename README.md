@@ -63,3 +63,52 @@ server change `SERVER_IP` at the top of `client.py`.
 |------|-------------|
 | `server.py` | TCP server — manages shared game state |
 | `client.py` | Pygame client — input, physics, rendering |
+
+---
+
+## Mario & Luigi Local Multiplayer
+
+A standalone local two-player platformer. Both players share the same
+screen and keyboard — no network connection needed.
+
+### Features
+
+* Ground tiles, floating brick/question/stone blocks, pipes, and clouds
+* Score and lives HUD displaying real-time player positions
+* Pixel-art sprite support via an `assets/` folder (color-block placeholders
+  are used automatically when image files are missing)
+
+### How to run
+
+```bash
+python game_local.py
+```
+
+### Controls
+
+| Player | Key | Action |
+|--------|-----|--------|
+| P1 – Mario | ← / → | Move left / right |
+| P1 – Mario | ↑ | Jump |
+| P2 – Luigi | A / D | Move left / right |
+| P2 – Luigi | W | Jump |
+| Both | Esc | Quit |
+
+### Optional assets
+
+Place image files in an `assets/` sub-folder to replace the color
+placeholders:
+
+| File | Description |
+|------|-------------|
+| `mario_walk.png` | Mario sprite |
+| `luigi_stand.png` | Luigi sprite |
+| `brick_block.png` | Brick block tile |
+| `question_block.png` | Question-mark block tile |
+| `stone_block.png` | Stone block tile |
+| `ground_brick.png` | Ground tile |
+| `cloud.png` | Cloud sprite |
+| `pipe.png` | Pipe sprite |
+
+A `PressStart2P.ttf` font file placed in the same directory as
+`game_local.py` will be used for the HUD text if available.

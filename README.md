@@ -153,3 +153,88 @@ placeholders:
 
 A `PressStart2P.ttf` font file placed in the same directory as
 `game_local.py` will be used for the HUD text if available.
+
+---
+
+## Web Edition (HTML5 Canvas)
+
+A browser-based version that reproduces both game modes — no Pygame required.
+
+### Architecture
+
+```
+Browser  ──HTTP──>  FastAPI (web_server.py)  serves  static/index.html
+Browser  ──WS───>  /ws/{room_id}            WebSocket multiplayer relay
+```
+
+### Files
+
+| File | Description |
+|------|-------------|
+| `web_server.py` | FastAPI server — serves the frontend and relays multiplayer positions |
+| `static/index.html` | Self-contained HTML5 Canvas game (local & multiplayer modes) |
+| `Procfile` | Heroku process declaration |
+| `runtime.txt` | Python version pin for Heroku |
+
+### Run locally
+
+```bash
+# Install dependencies (includes fastapi & uvicorn)
+pip install -r requirements.txt
+
+# Start the server
+uvicorn web_server:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Open **http://localhost:8000** in your browser.
+
+### Controls (web)
+
+| Mode | Player | Keys | Action |
+|------|--------|------|--------|
+| Local | P1 – Mario | ← → ↑ / Space | Move & jump |
+| Local | P2 – Luigi | A D W | Move & jump |
+| Multiplayer | Your character | ← → ↑ / Space | Move & jump |
+
+### Multiplayer (same network or remote)
+
+1. Start the server (see above, or deploy to Heroku).
+2. Both players open the game URL in their browser.
+3. Click **Multiplayer**, type the **same Room ID**, and click **Connect**.
+4. The first to connect becomes Mario; the second becomes Luigi.
+
+---
+
+## Deploy to Heroku
+
+### Prerequisites
+
+* [Heroku CLI](https://devcenter.heroku.com/articles/heroku-cli) installed and logged in (`heroku login`).
+* Git repository initialised (already done if you cloned this repo).
+
+### Steps
+
+```bash
+# 1. Create a new Heroku app (choose any name, or omit for a random one)
+heroku create your-app-name
+
+# 2. Push to Heroku
+git push heroku main
+
+# 3. Open the deployed app in your browser
+heroku open
+```
+
+The `Procfile` already tells Heroku to start uvicorn and bind to the
+`$PORT` environment variable that Heroku provides automatically.
+
+### Notes
+
+* Heroku requires a paid dyno type (free dynos were discontinued in
+  November 2022). The cheapest option is the **Eco** dyno plan.
+* Eco dynos sleep after 30 minutes of inactivity — the first
+  request after sleep takes a few seconds.
+* WebSockets are fully supported on Heroku (all dynos).
+* If you use multiple dynos, add a Redis-backed session store so room state
+  is shared across instances (the current in-memory store works on a single
+  dyno).

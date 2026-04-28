@@ -4,6 +4,51 @@ A collection of Python games.
 
 ---
 
+## Environment Setup
+
+### Requirements
+
+* **Python 3.8+** — [Download](https://www.python.org/downloads/)
+* **pygame 2.1+**
+
+### Quick install (recommended: use a virtual environment)
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/juanfranciscofernandezherreros/games-python.git
+cd games-python
+
+# 2. Create and activate a virtual environment
+python -m venv .venv
+
+# On Linux / macOS:
+source .venv/bin/activate
+
+# On Windows (cmd):
+.venv\Scripts\activate.bat
+
+# On Windows (PowerShell):
+.venv\Scripts\Activate.ps1
+
+# 3. Install dependencies
+pip install -r requirements.txt
+```
+
+> **Linux note:** pygame requires a display server and some system libraries.
+> Install them with:
+> ```bash
+> sudo apt-get install python3-dev libsdl2-dev libsdl2-image-dev \
+>     libsdl2-mixer-dev libsdl2-ttf-dev libfreetype6-dev
+> ```
+
+> **macOS note:** If you install Python via Homebrew, make sure you use the
+> Homebrew Python and not the system one:
+> ```bash
+> brew install python
+> ```
+
+---
+
 ## Mario & Luigi Multiplayer
 
 A basic two-player side-scrolling platformer built with **pygame** and Python
@@ -24,11 +69,7 @@ the result to the server every frame.
 
 ### Requirements
 
-```
-pip install pygame
-```
-
-Python 3.8+ is required. No other third-party dependencies.
+See the **Environment Setup** section at the top of this file.
 
 ### How to run
 
@@ -63,3 +104,52 @@ server change `SERVER_IP` at the top of `client.py`.
 |------|-------------|
 | `server.py` | TCP server — manages shared game state |
 | `client.py` | Pygame client — input, physics, rendering |
+
+---
+
+## Mario & Luigi Local Multiplayer
+
+A standalone local two-player platformer. Both players share the same
+screen and keyboard — no network connection needed.
+
+### Features
+
+* Ground tiles, floating brick/question/stone blocks, pipes, and clouds
+* Score and lives HUD displaying real-time player positions
+* Pixel-art sprite support via an `assets/` folder (color-block placeholders
+  are used automatically when image files are missing)
+
+### How to run
+
+```bash
+python game_local.py
+```
+
+### Controls
+
+| Player | Key | Action |
+|--------|-----|--------|
+| P1 – Mario | ← / → | Move left / right |
+| P1 – Mario | ↑ | Jump |
+| P2 – Luigi | A / D | Move left / right |
+| P2 – Luigi | W | Jump |
+| Both | Esc | Quit |
+
+### Optional assets
+
+Place image files in an `assets/` sub-folder to replace the color
+placeholders:
+
+| File | Description |
+|------|-------------|
+| `mario_walk.png` | Mario sprite |
+| `luigi_stand.png` | Luigi sprite |
+| `brick_block.png` | Brick block tile |
+| `question_block.png` | Question-mark block tile |
+| `stone_block.png` | Stone block tile |
+| `ground_brick.png` | Ground tile |
+| `cloud.png` | Cloud sprite |
+| `pipe.png` | Pipe sprite |
+
+A `PressStart2P.ttf` font file placed in the same directory as
+`game_local.py` will be used for the HUD text if available.

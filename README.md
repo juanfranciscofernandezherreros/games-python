@@ -4,6 +4,51 @@ A collection of Python games.
 
 ---
 
+## Environment Setup
+
+### Requirements
+
+* **Python 3.8+** — [Download](https://www.python.org/downloads/)
+* **pygame 2.1+**
+
+### Quick install (recommended: use a virtual environment)
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/juanfranciscofernandezherreros/games-python.git
+cd games-python
+
+# 2. Create and activate a virtual environment
+python -m venv .venv
+
+# On Linux / macOS:
+source .venv/bin/activate
+
+# On Windows (cmd):
+.venv\Scripts\activate.bat
+
+# On Windows (PowerShell):
+.venv\Scripts\Activate.ps1
+
+# 3. Install dependencies
+pip install -r requirements.txt
+```
+
+> **Linux note:** pygame requires a display server and some system libraries.
+> Install them with:
+> ```bash
+> sudo apt-get install python3-dev libsdl2-dev libsdl2-image-dev \
+>     libsdl2-mixer-dev libsdl2-ttf-dev libfreetype6-dev
+> ```
+
+> **macOS note:** If you install Python via Homebrew, make sure you use the
+> Homebrew Python and not the system one:
+> ```bash
+> brew install python
+> ```
+
+---
+
 ## Mario & Luigi Multiplayer
 
 A basic two-player side-scrolling platformer built with **pygame** and Python
@@ -24,11 +69,7 @@ the result to the server every frame.
 
 ### Requirements
 
-```
-pip install pygame
-```
-
-Python 3.8+ is required. No other third-party dependencies.
+See the **Environment Setup** section at the top of this file.
 
 ### How to run
 

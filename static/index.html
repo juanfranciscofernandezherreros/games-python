@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mario &amp; Luigi — Web Edition</title>
+  <style>
+    /* ── Reset & base ──────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #1a1a2e;
+      color: #eee;
+      font-family: 'Courier New', monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 16px;
+      gap: 12px;
+    }
+    h1 { font-size: 1.4rem; letter-spacing: 2px; text-shadow: 0 0 8px #ff0; }
+
+    /* ── Mode selector ─────────────────────────────────────────────────── */
+    #controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+    button {
+      padding: 6px 16px;
+      font-family: inherit;
+      font-size: .85rem;
+      border: 2px solid #888;
+      border-radius: 4px;
+      background: #333;
+      color: #eee;
+      cursor: pointer;
+      transition: background .15s, border-color .15s;
+    }
+    button:hover { background: #555; border-color: #ccc; }
+    button.active { background: #007bff; border-color: #7af; color: #fff; }
+    #roomRow { display: flex; align-items: center; gap: 6px; }
+    #roomInput {
+      padding: 5px 10px;
+      font-family: inherit;
+      font-size: .85rem;
+      border: 2px solid #888;
+      border-radius: 4px;
+      background: #222;
+      color: #eee;
+      width: 140px;
+    }
+    #statusMsg {
+      font-size: .8rem;
+      color: #aaa;
+      min-height: 1.2em;
+    }
+
+    /* ── Canvas ────────────────────────────────────────────────────────── */
+    #gameCanvas {
+      border: 3px solid #555;
+      border-radius: 4px;
+      display: block;
+      /* responsive: scale down on small screens */
+      max-width: 100%;
+      image-rendering: pixelated;
+    }
+
+    /* ── Legend ────────────────────────────────────────────────────────── */
+    #legend {
+      font-size: .75rem;
+      color: #999;
+      text-align: center;
+      line-height: 1.6;
+    }
+    #legend span.key {
+      display: inline-block;
+      background: #333;
+      border: 1px solid #666;
+      border-radius: 3px;
+      padding: 1px 5px;
+      color: #ddd;
+    }
+  </style>
+</head>
+<body>
+  <h1>🍄 Mario &amp; Luigi — Web Edition</h1>
+
+  <div id="controls">
+    <button id="btnLocal" class="active" onclick="setMode('local')">Local 2-Player</button>
+    <button id="btnMulti" onclick="setMode('multi')">Multiplayer</button>
+    <div id="roomRow" style="display:none">
+      <input id="roomInput" type="text" placeholder="Room ID…" maxlength="32" />
+      <button onclick="connectRoom()">Connect</button>
+      <button onclick="disconnectRoom()">Disconnect</button>
+    </div>
+  </div>
+  <div id="statusMsg">Local mode — P1: Arrow keys / Space &nbsp;|&nbsp; P2: WASD</div>
+
+  <canvas id="gameCanvas" width="800" height="500"></canvas>
+
+  <div id="legend">
+    <strong>Local:</strong>
+    P1 Mario — <span class="key">←</span><span class="key">→</span><span class="key">↑</span><span class="key">Space</span>
+    &nbsp;|&nbsp;
+    P2 Luigi — <span class="key">A</span><span class="key">D</span><span class="key">W</span>
+    <br />
+    <strong>Multiplayer:</strong> enter a Room ID, click Connect, share the same ID with your friend
+  </div>
+
+<script>
+// ════════════════════════════════════════════════════════════════════════════
+// Constants
+// ════════════════════════════════════════════════════════════════════════════
+const W = 800, H = 500;
+const FPS = 60;
+const GRAVITY    = 0.55;
+const JUMP       = -13;
+const SPEED      = 5;
+const TILE       = 40;          // block size in pixels
+const GROUND_TOP = H - TILE * 2; // y where ground starts
+const PW = 32, PH = 48;         // player width / height
+
+// Colours
+const SKY    = '#87CEEB';
+const GROUND_CLR = '#8B5A2B';
+const BRICK  = '#A52A2A';
+const QMARK  = '#FFD700';
+const STONE  = '#888888';
+const PIPE   = '#006400';
+const CLOUD  = '#FFFFFF';
+const MARIO_CLR = '#FF0000';
+const LUIGI_CLR = '#00C800';
+const WHITE  = '#FFFFFF';
+const BLACK  = '#000000';
+const TEXT   = '#FFFFFF';
+
+// ════════════════════════════════════════════════════════════════════════════
+// Level layout — list of {x, y, type}
+// ════════════════════════════════════════════════════════════════════════════
+const BLOCKS = buildLevel();
+
+function buildLevel() {
+  const blocks = [];
+
+  // Ground rows (2 rows)
+  for (let row = 0; row < 2; row++) {
+    const ty = GROUND_TOP + row * TILE;
+    for (let tx = 0; tx < W; tx += TILE) {
+      blocks.push({ x: tx, y: ty, w: TILE, h: TILE, type: 'ground', solid: true });
+    }
+  }
+
+  // Floating mid blocks (brick Q brick Q brick) centred
+  const midY = GROUND_TOP - TILE * 3;
+  const midOffsets = [-80, -40, 0, 40, 80];
+  midOffsets.forEach((ox, i) => {
+    const tx = W / 2 - TILE / 2 + ox;
+    const t = (i === 1 || i === 3) ? 'qmark' : 'brick';
+    blocks.push({ x: tx, y: midY, w: TILE, h: TILE, type: t, solid: true });
+  });
+
+  // High right-side blocks (brick Q brick stone)
+  const hiY = 140;
+  [-TILE * 2, -TILE, 0, TILE].forEach((ox, i) => {
+    const tx = W - TILE * 5 + ox;
+    let t = 'brick';
+    if (i === 1) t = 'qmark';
+    if (i === 3) t = 'stone';
+    blocks.push({ x: tx, y: hiY, w: TILE, h: TILE, type: t, solid: true });
+  });
+
+  // Single low question block
+  blocks.push({ x: 320, y: 160, w: TILE, h: TILE, type: 'qmark', solid: true });
+
+  // Pipe (2×2 tiles)
+  blocks.push({ x: W - TILE * 6, y: GROUND_TOP - TILE * 2, w: TILE * 2, h: TILE * 2, type: 'pipe', solid: true });
+
+  // Clouds (decorative, non-solid)
+  [[160, 60], [W / 2 - 50, 50], [W - 210, 55]].forEach(([cx, cy]) => {
+    blocks.push({ x: cx, y: cy, w: 100, h: 44, type: 'cloud', solid: false });
+  });
+
+  return blocks;
+}
+
+const solidBlocks = BLOCKS.filter(b => b.solid);
+
+// ════════════════════════════════════════════════════════════════════════════
+// Player class
+// ════════════════════════════════════════════════════════════════════════════
+class Player {
+  constructor(x, y, color, name) {
+    this.x = x; this.y = y;
+    this.vx = 0; this.vy = 0;
+    this.onGround = false;
+    this.color = color;
+    this.name = name;
+  }
+
+  update(keysDown) {
+    // horizontal
+    this.vx = 0;
+    if (keysDown.left)  this.vx = -SPEED;
+    if (keysDown.right) this.vx =  SPEED;
+
+    // jump
+    if (keysDown.up && this.onGround) {
+      this.vy = JUMP;
+      this.onGround = false;
+    }
+
+    // gravity
+    this.vy += GRAVITY;
+    if (this.vy > 20) this.vy = 20;
+
+    // move X then resolve collisions, move Y then resolve
+    this.x += this.vx;
+    this._resolveX();
+    this.y += this.vy;
+    this.onGround = false;
+    this._resolveY();
+
+    // clamp horizontal
+    if (this.x < 0) this.x = 0;
+    if (this.x + PW > W) this.x = W - PW;
+  }
+
+  _resolveX() {
+    for (const b of solidBlocks) {
+      if (this._overlaps(b)) {
+        if (this.vx > 0) this.x = b.x - PW;
+        else if (this.vx < 0) this.x = b.x + b.w;
+        this.vx = 0;
+      }
+    }
+  }
+
+  _resolveY() {
+    for (const b of solidBlocks) {
+      if (this._overlaps(b)) {
+        if (this.vy > 0) {          // falling → land on top
+          this.y = b.y - PH;
+          this.vy = 0;
+          this.onGround = true;
+        } else if (this.vy < 0) {   // jumping → hit underside
+          this.y = b.y + b.h;
+          this.vy = 0;
+        }
+      }
+    }
+  }
+
+  _overlaps(b) {
+    return (
+      this.x < b.x + b.w &&
+      this.x + PW > b.x &&
+      this.y < b.y + b.h &&
+      this.y + PH > b.y
+    );
+  }
+
+  draw(ctx) {
+    // Body
+    ctx.fillStyle = this.color;
+    ctx.fillRect(this.x, this.y, PW, PH);
+
+    // Eyes
+    const eyeY = this.y + 10;
+    ctx.fillStyle = WHITE;
+    ctx.beginPath(); ctx.arc(this.x + 8,  eyeY, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(this.x + 24, eyeY, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = BLACK;
+    ctx.beginPath(); ctx.arc(this.x + 9,  eyeY, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(this.x + 25, eyeY, 2, 0, Math.PI * 2); ctx.fill();
+
+    // Name label
+    ctx.fillStyle = this.color;
+    ctx.font = 'bold 11px "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(this.name, this.x + PW / 2, this.y - 6);
+    ctx.textAlign = 'left';
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Rendering helpers
+// ════════════════════════════════════════════════════════════════════════════
+function drawBlock(ctx, b) {
+  switch (b.type) {
+    case 'ground': {
+      ctx.fillStyle = GROUND_CLR;
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+      ctx.strokeStyle = '#5C3317';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(b.x + .5, b.y + .5, b.w - 1, b.h - 1);
+      break;
+    }
+    case 'brick': {
+      ctx.fillStyle = BRICK;
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+      ctx.strokeStyle = '#7B1818';
+      ctx.lineWidth = 1;
+      // horizontal mortar lines
+      ctx.beginPath();
+      ctx.moveTo(b.x, b.y + b.h / 2); ctx.lineTo(b.x + b.w, b.y + b.h / 2);
+      ctx.stroke();
+      // vertical mortar alternating rows
+      ctx.beginPath();
+      ctx.moveTo(b.x + b.w / 2, b.y); ctx.lineTo(b.x + b.w / 2, b.y + b.h / 2);
+      ctx.moveTo(b.x + b.w / 4, b.y + b.h / 2); ctx.lineTo(b.x + b.w / 4, b.y + b.h);
+      ctx.moveTo(b.x + b.w * 3 / 4, b.y + b.h / 2); ctx.lineTo(b.x + b.w * 3 / 4, b.y + b.h);
+      ctx.stroke();
+      break;
+    }
+    case 'qmark': {
+      ctx.fillStyle = QMARK;
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+      ctx.fillStyle = BLACK;
+      ctx.font = `bold ${Math.floor(b.w * .55)}px "Courier New", monospace`;
+      ctx.textAlign = 'center';
+      ctx.fillText('?', b.x + b.w / 2, b.y + b.h * .72);
+      ctx.textAlign = 'left';
+      break;
+    }
+    case 'stone': {
+      ctx.fillStyle = STONE;
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+      ctx.strokeStyle = '#555';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(b.x + .5, b.y + .5, b.w - 1, b.h - 1);
+      break;
+    }
+    case 'pipe': {
+      // Pipe body
+      ctx.fillStyle = PIPE;
+      ctx.fillRect(b.x + 4, b.y + 14, b.w - 8, b.h - 14);
+      // Pipe top cap (slightly wider)
+      ctx.fillRect(b.x, b.y, b.w, 14);
+      // Highlights
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.fillRect(b.x + 6, b.y + 2, 6, b.h - 4);
+      break;
+    }
+    case 'cloud': {
+      ctx.fillStyle = CLOUD;
+      const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy + 4, 18, 0, Math.PI * 2);
+      ctx.arc(cx - 20, cy + 10, 14, 0, Math.PI * 2);
+      ctx.arc(cx + 20, cy + 10, 14, 0, Math.PI * 2);
+      ctx.arc(cx - 10, cy - 2, 16, 0, Math.PI * 2);
+      ctx.arc(cx + 12, cy - 2, 14, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+  }
+}
+
+function drawHUD(ctx, p1, p2, score, lives) {
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.fillRect(6, 6, 230, 90);
+  ctx.fillStyle = TEXT;
+  ctx.font = '13px "Courier New", monospace';
+  ctx.fillText(`SCORE: ${String(score).padStart(6, '0')}`, 14, 24);
+  ctx.fillText(`LIVES: ${String(lives).padStart(2, '0')}`, 14, 42);
+  ctx.fillText(`P1 POS: [${Math.round(p1.x)}, ${Math.round(p1.y)}]`, 14, 62);
+  ctx.fillText(`P2 POS: [${Math.round(p2.x)}, ${Math.round(p2.y)}]`, 14, 80);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Game state
+// ════════════════════════════════════════════════════════════════════════════
+let mode = 'local';   // 'local' | 'multi'
+let score = 2345;
+let lives = 3;
+
+// Players
+const mario = new Player(80,  GROUND_TOP - PH, MARIO_CLR, 'Mario');
+const luigi  = new Player(160, GROUND_TOP - PH, LUIGI_CLR, 'Luigi');
+
+// Opponent ghost for multiplayer (not physics-updated)
+const opponent = new Player(160, GROUND_TOP - PH, LUIGI_CLR, 'Luigi');
+opponent._isGhost = true;
+
+// Multiplayer state
+let socket = null;
+let myPlayerIndex = -1;   // 0 = Mario, 1 = Luigi
+let opponentConnected = false;
+
+// ════════════════════════════════════════════════════════════════════════════
+// Input
+// ════════════════════════════════════════════════════════════════════════════
+const keys = {};
+
+document.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  // Prevent page scrolling for game keys
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) {
+    e.preventDefault();
+  }
+});
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+function p1Keys() {
+  return {
+    left:  keys['ArrowLeft'],
+    right: keys['ArrowRight'],
+    up:    keys['ArrowUp'] || keys['Space'],
+  };
+}
+
+function p2Keys() {
+  return {
+    left:  keys['KeyA'],
+    right: keys['KeyD'],
+    up:    keys['KeyW'],
+  };
+}
+
+function myKeys() {
+  return {
+    left:  keys['ArrowLeft'],
+    right: keys['ArrowRight'],
+    up:    keys['ArrowUp'] || keys['Space'],
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Mode switching
+// ════════════════════════════════════════════════════════════════════════════
+function setMode(m) {
+  if (mode === 'multi' && socket) disconnectRoom();
+  mode = m;
+  document.getElementById('btnLocal').classList.toggle('active', m === 'local');
+  document.getElementById('btnMulti').classList.toggle('active', m === 'multi');
+  document.getElementById('roomRow').style.display = m === 'multi' ? 'flex' : 'none';
+  setStatus(
+    m === 'local'
+      ? 'Local mode — P1: Arrow keys / Space | P2: WASD'
+      : 'Multiplayer — enter a Room ID and click Connect'
+  );
+  // Reset player positions
+  mario.x = 80;  mario.y = GROUND_TOP - PH;  mario.vx = 0; mario.vy = 0;
+  luigi.x = 160; luigi.y = GROUND_TOP - PH;  luigi.vx = 0; luigi.vy = 0;
+}
+
+function setStatus(msg) {
+  document.getElementById('statusMsg').textContent = msg;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// WebSocket (multiplayer)
+// ════════════════════════════════════════════════════════════════════════════
+function connectRoom() {
+  const roomId = document.getElementById('roomInput').value.trim();
+  if (!roomId) { setStatus('Please enter a Room ID.'); return; }
+  if (socket) { disconnectRoom(); }
+
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const url = `${proto}://${location.host}/ws/${encodeURIComponent(roomId)}`;
+  setStatus(`Connecting to room "${roomId}"…`);
+  socket = new WebSocket(url);
+
+  socket.onopen = () => setStatus(`Connected — waiting for opponent in room "${roomId}"…`);
+
+  socket.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === 'error') {
+      setStatus(`Server error: ${msg.message}`);
+      disconnectRoom();
+      return;
+    }
+    if (msg.type === 'init') {
+      myPlayerIndex = msg.player_index;
+      const me = myPlayerIndex === 0 ? mario : luigi;
+      me.x = msg.x; me.y = msg.y; me.vx = 0; me.vy = 0;
+      setStatus(`You are ${myPlayerIndex === 0 ? 'Mario (P1)' : 'Luigi (P2)'} — waiting for opponent…`);
+      return;
+    }
+    if (msg.type === 'update') {
+      opponentConnected = msg.connected;
+      opponent.x = msg.x;
+      opponent.y = msg.y;
+      if (opponentConnected) {
+        setStatus(`In game — room "${roomId}" — you are ${myPlayerIndex === 0 ? 'Mario' : 'Luigi'}`);
+      }
+    }
+  };
+
+  socket.onclose = () => {
+    setStatus('Disconnected from server.');
+    socket = null;
+    myPlayerIndex = -1;
+    opponentConnected = false;
+  };
+
+  socket.onerror = () => {
+    setStatus('Connection error — is the server running?');
+  };
+}
+
+function disconnectRoom() {
+  if (socket) {
+    socket.close();
+    socket = null;
+  }
+  myPlayerIndex = -1;
+  opponentConnected = false;
+  setStatus('Disconnected.');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Main game loop
+// ════════════════════════════════════════════════════════════════════════════
+const canvas = document.getElementById('gameCanvas');
+const ctx    = canvas.getContext('2d');
+
+let lastTime = 0;
+const frameTime = 1000 / FPS;
+
+function loop(ts) {
+  if (ts - lastTime < frameTime - 1) {
+    requestAnimationFrame(loop);
+    return;
+  }
+  lastTime = ts;
+
+  // ── Update ────────────────────────────────────────────────────────────────
+  if (mode === 'local') {
+    mario.update(p1Keys());
+    luigi.update(p2Keys());
+  } else if (mode === 'multi' && myPlayerIndex !== -1) {
+    const me = myPlayerIndex === 0 ? mario : luigi;
+    me.update(myKeys());
+    // Send position to server
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ x: Math.round(me.x), y: Math.round(me.y) }));
+    }
+    // Sync opponent ghost
+    const ghost = myPlayerIndex === 0 ? luigi : mario;
+    ghost.x = opponent.x;
+    ghost.y = opponent.y;
+  }
+
+  // ── Draw ──────────────────────────────────────────────────────────────────
+  // Sky
+  ctx.fillStyle = SKY;
+  ctx.fillRect(0, 0, W, H);
+
+  // Blocks (non-solid first so clouds appear behind)
+  BLOCKS.filter(b => !b.solid).forEach(b => drawBlock(ctx, b));
+  BLOCKS.filter(b =>  b.solid).forEach(b => drawBlock(ctx, b));
+
+  // Players
+  if (mode === 'local') {
+    mario.draw(ctx);
+    luigi.draw(ctx);
+  } else {
+    const me    = myPlayerIndex === 0 ? mario : luigi;
+    const ghost = myPlayerIndex === 0 ? luigi : mario;
+    ghost.draw(ctx);
+    me.draw(ctx);
+    // Waiting overlay when opponent not yet connected
+    if (!opponentConnected) {
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#FFD700';
+      ctx.font = 'bold 22px "Courier New", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('Waiting for opponent…', W / 2, H / 2);
+      ctx.textAlign = 'left';
+    }
+  }
+
+  // HUD
+  drawHUD(ctx, mario, luigi, score, lives);
+
+  requestAnimationFrame(loop);
+}
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
